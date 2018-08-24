@@ -1,0 +1,96 @@
+Senha Mysql da Hortonworks: hadoop
+
+maria_dev@localhost $ mysql -u root -p 
+
+mysql> create database movielens;
+mysql> show databases;
+mysql> exit
+
+$ wget http://media.sundog-soft.com/hadoop/movielens.sql
+
+mysql> SET NAMES 'utf8';
+
+mysql> SET CHARACTER SET utf8;
+
+mysql> use movielens;
+
+mysql> source movielens.sql;
+
+mysql> select * from movies limit 10;
+
+mysql> describe ratings;
+
+mysql> SELECT movies.title, COUNT(ratings.movie_id) AS ratingCount
+    -> FROM movies
+    -> INNER JOIN ratings
+    -> ON movies.id = ratings.movie_id
+    -> GROUP BY movies.title
+    -> ORDER BY ratingCount;
+
+mysql> GRANT ALL PRIVILEGES ON movielens.* to ''@'localhost';
+
+mysql> exit
+
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: MySQL to HDFS :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+[maria_dev@sandbox-hdp ~]$ sqoop import --connect jdbc:mysql://localhost/movielens --driver com.mysql.jdbc.Driver --table movies -m 1 
+
+http://localhost:8080 (Visualizar HDFS)
+
+Remover o movies do HDFS
+
+http://localhost:8080 (Visualizar no Hive)
+
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: MySQL to Hive :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+Fazer com o usuário hive:
+# sudo -s
+# su - hive
+
+[hive@sandbox-hdp ~]$ sqoop import --connect jdbc:mysql://localhost/movielens --driver com.mysql.jdbc.Driver --table movies --hive-import
+
+Worksheet
+
+SELECT * FROM movies LIMIT 100;
+
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: HDFS to MySQL :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+apps -> hive -> warehouse
+
+$ mysql -u root -p
+
+mysql> use movielens;
+
+mysql> CREATE TABLE exported_movies ( id INTEGER, title VARCHAR(255), releaseData DATE);
+Query OK, 0 rows affected (0,09 sec)
+
+mysql> exit
+
+[maria_dev@sandbox-hdp ~]$ sqoop export --connect jdbc:mysql://localhost/movielens -m 1 --driver com.mysql.jdbc.Driver --table exported_movies --export-dir /apps/hive/warehouse/movies --input-fields-terminated-by '\0001'
+
+$ mysql -u root -p
+
+mysql> use movielens;
+
+mysql> select * from exported_movies limit 5;
+
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: MySQL to HBASE :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+[maria_dev@sandbox-hdp ~]$ hbase shell
+
+hbase(main):001:0> create 'movies', 'id', 'title', 'releaseData'
+
+
+hbase(main):002:0> list
+TABLE                                                                           
+ATLAS_ENTITY_AUDIT_EVENTS                                                       
+atlas_titan                                                                     
+iemployee                                                                       
+movies                                                                          
+4 row(s) in 0.0490 seconds
+
+
+$ sqoop import --connect jdbc:mysql://localhost:3306/movielens?useSSL=false --username root -P --target-dir sqoop_test --table exported_movies -hbase-table movies --hbase-row-key id --column-family id -m 1 --driver com.mysql.jdbc.Driver
+
+
+
